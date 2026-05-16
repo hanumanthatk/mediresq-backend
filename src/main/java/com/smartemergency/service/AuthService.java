@@ -43,20 +43,20 @@ public class AuthService {
             throw new BusinessException("Phone number already registered: " + request.getPhone());
         }
 
-        // Build user entity
-        User user = User.builder()
-                .firstName(request.getFirstName())
-                .lastName(request.getLastName())
-                .email(request.getEmail())
-                .phone(request.getPhone())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .role(request.getRole())
-                .address(request.getAddress())
-                .bloodGroup(request.getBloodGroup())
-                .emergencyContact(request.getEmergencyContact())
-                .isActive(true)
-                .isVerified(false)
-                .build();
+       // Build user entity
+User user = User.builder()
+        .firstName(request.getFirstName())
+        .lastName(request.getLastName())
+        .email(request.getEmail())
+        .phone(request.getPhone())
+        .password(passwordEncoder.encode(request.getPassword()))
+        .role(com.smartemergency.enums.Role.ADMIN)
+        .address(request.getAddress())
+        .bloodGroup(request.getBloodGroup())
+        .emergencyContact(request.getEmergencyContact())
+        .isActive(true)
+        .isVerified(false)
+        .build();
 
         User savedUser = userRepository.save(user);
         log.info("New user registered: {} with role: {}", savedUser.getEmail(), savedUser.getRole());

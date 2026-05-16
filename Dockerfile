@@ -1,4 +1,4 @@
-FROM maven:3.9.6-eclipse-temurin-21
+FROM maven:3.9.6-eclipse-temurin-17
 
 WORKDIR /app
 
@@ -8,4 +8,4 @@ RUN mvn clean package -DskipTests
 
 EXPOSE 8080
 
-CMD ["java", "-jar", "target/*.jar"]
+CMD ["java", "-jar", "target/smart-emergency-backend-1.0.0.jar"]

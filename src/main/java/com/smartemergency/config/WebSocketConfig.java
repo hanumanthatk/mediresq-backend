@@ -9,6 +9,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 /**
  * WebSocket Configuration using STOMP protocol.
  * Enables real-time bidirectional communication for emergency updates.
+ * Compatible with Render deployment and all major browsers.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -18,12 +19,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         // Enable simple in-memory message broker
         registry.enableSimpleBroker(
-            "/topic",      // For broadcast messages (all subscribers)
-            "/queue"       // For user-specific messages
+            "/topic",   // Broadcast messages (all subscribers)
+            "/queue"    // User-specific messages
         );
-        // Application destination prefix for messages from client to server
+        // Prefix for messages from client to server
         registry.setApplicationDestinationPrefixes("/app");
-        // User destination prefix for user-specific messages
+        // Prefix for user-specific messages
         registry.setUserDestinationPrefix("/user");
     }
 
@@ -31,6 +32,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
-                .withSockJS();  // Fallback for browsers that don't support WebSocket
+                .withSockJS()
+                // Heartbeat to keep connection alive on Render
+                .setHeartbeatTime(25000)
+                // Disable session cookie for cross-origin deployments
+                .setSessionCookieNeeded(false)
+                // Increase disconnect delay for slow connections
+                .setDisconnectDelay(30000)
+                // Client library URL for SockJS fallback
+                .setClientLibraryUrl(
+                    "https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"
+                );
     }
 }

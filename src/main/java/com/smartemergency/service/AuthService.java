@@ -3,378 +3,187 @@ package com.smartemergency.service;
 import com.smartemergency.dto.request.LoginRequest;
 import com.smartemergency.dto.request.RegisterRequest;
 import com.smartemergency.dto.response.AuthResponse;
+import com.smartemergency.entity.Hospital;
 import com.smartemergency.entity.User;
 import com.smartemergency.exception.BusinessException;
+import com.smartemergency.repository.HospitalRepository;
 import com.smartemergency.repository.UserRepository;
 import com.smartemergency.security.JwtService;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Authentication Service
+ * Authentication Service - Handles register, login, token refresh.
+ * Login bypasses AuthenticationManager for compatibility with
+ * both BCrypt and plain-text legacy passwords.
  */
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AuthService {
 
     private final UserRepository userRepository;
-
+    private final HospitalRepository hospitalRepository;
     private final PasswordEncoder passwordEncoder;
-
     private final JwtService jwtService;
 
-    private final AuthenticationManager authenticationManager;
+    // NOTE: AuthenticationManager removed intentionally.
+    // We do manual validation to support mixed password formats.
 
-    /**
-     * REGISTER
-     */
+    // =====================================================
+    // REGISTER
+    // =====================================================
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
 
-        /* CHECK EMAIL */
-
-        if(userRepository.existsByEmail(request.getEmail())){
-
+        // Check duplicate email
+        if (userRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException(
-
-                "Email already registered: " +
-
-                request.getEmail()
-
+                "Email already registered: " + request.getEmail()
             );
-
         }
 
-        /* CHECK PHONE */
-
-        if(userRepository.existsByPhone(request.getPhone())){
-
+        // Check duplicate phone
+        if (userRepository.existsByPhone(request.getPhone())) {
             throw new BusinessException(
-
-                "Phone number already registered: " +
-
-                request.getPhone()
-
+                "Phone number already registered: " + request.getPhone()
             );
-
         }
 
-        /* CREATE USER */
-
+        // Build and save user
         User user = User.builder()
-
                 .firstName(request.getFirstName())
-
                 .lastName(request.getLastName())
-
                 .email(request.getEmail())
-
                 .phone(request.getPhone())
-
-                .password(
-
-                    passwordEncoder.encode(
-                        request.getPassword()
-                    )
-
-                )
-
+                .password(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
-
                 .address(request.getAddress())
-
                 .bloodGroup(request.getBloodGroup())
-
-                .emergencyContact(
-                    request.getEmergencyContact()
-                )
-
+                .emergencyContact(request.getEmergencyContact())
                 .isActive(true)
-
                 .isVerified(false)
-
                 .build();
 
         User savedUser = userRepository.save(user);
+        log.info("New user registered: {} | Role: {}", savedUser.getEmail(), savedUser.getRole());
 
-        log.info(
-
-            "New user registered: {} with role: {}",
-
-            savedUser.getEmail(),
-
-            savedUser.getRole()
-
-        );
-
-        /* TOKENS */
-
-        String accessToken =
-
-            jwtService.generateToken(savedUser);
-
-        String refreshToken =
-
-            jwtService.generateRefreshToken(savedUser);
+        String accessToken  = jwtService.generateToken(savedUser);
+        String refreshToken = jwtService.generateRefreshToken(savedUser);
 
         return AuthResponse.builder()
-
                 .accessToken(accessToken)
-
                 .refreshToken(refreshToken)
-
                 .tokenType("Bearer")
-
                 .userId(savedUser.getId())
-
                 .email(savedUser.getEmail())
-
                 .fullName(savedUser.getFullName())
-
                 .role(savedUser.getRole())
-
-                .message(
-
-                    "Registration successful!"
-
-                )
-
+                .message("Registration successful! Welcome to Smart Emergency System.")
                 .build();
-
     }
 
-    /**
-     * LOGIN
-     */
+    // =====================================================
+    // LOGIN
+    // =====================================================
 
+    @Transactional
     public AuthResponse login(LoginRequest request) {
-
-        /* FIND USER */
-
-        User user = userRepository
-
-                .findByEmail(request.getEmail())
-
-                .orElseThrow(() ->
-
-                    new BusinessException(
-
-                        "Invalid email or password"
-
-                    )
-
-                );
-
-        /* CHECK ACTIVE */
-
-        if(!Boolean.TRUE.equals(user.getIsActive())){
-
-            throw new BusinessException(
-
-                "Account is deactivated"
-
-            );
-
-        }
-
-        boolean validPassword = false;
-
-        /* NEW BCRYPT PASSWORD */
-
-        try{
-
-            if(passwordEncoder.matches(
-
-                request.getPassword(),
-
-                user.getPassword()
-
-            )){
-
-                validPassword = true;
-
-            }
-
-        }catch(Exception e){
-
-            log.warn(
-
-                "Bcrypt check failed for user: {}",
-
-                user.getEmail()
-
-            );
-
-        }
-
-        /* OLD PLAIN TEXT PASSWORD */
-
-        if(!validPassword){
-
-            if(user.getPassword().equals(
-
-                request.getPassword()
-
-            )){
-
-                validPassword = true;
-
-                /* AUTO CONVERT TO BCRYPT */
-
-                String encodedPassword =
-
-                    passwordEncoder.encode(
-
-                        request.getPassword()
-
-                    );
-
-                user.setPassword(encodedPassword);
-
-                userRepository.save(user);
-
-                log.info(
-
-                    "Password upgraded to bcrypt for user: {}",
-
-                    user.getEmail()
-
-                );
-
-            }
-
-        }
-
-        /* INVALID */
-
-        if(!validPassword){
-
-            throw new BusinessException(
-
-                "Invalid email or password"
-
-            );
-
-        }
-
-        /* GENERATE TOKENS */
-
-        String accessToken =
-
-            jwtService.generateToken(user);
-
-        String refreshToken =
-
-            jwtService.generateRefreshToken(user);
-
-        log.info(
-
-            "User logged in successfully: {}",
-
-            user.getEmail()
-
-        );
-
-        return AuthResponse.builder()
-
-                .accessToken(accessToken)
-
-                .refreshToken(refreshToken)
-
-                .tokenType("Bearer")
-
-                .userId(user.getId())
-
-                .email(user.getEmail())
-
-                .fullName(user.getFullName())
-
-                .role(user.getRole())
-
-                .message("Login successful!")
-
-                .build();
-
+    // Step 1: Find user by email
+    User user = userRepository.findByEmail(request.getEmail())
+            .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+
+    // Step 2: Check if account is active
+    if (!Boolean.TRUE.equals(user.getIsActive())) {
+        throw new BusinessException("Account is deactivated. Please contact support.");
     }
 
-    /**
-     * REFRESH TOKEN
-     */
+    // Step 3: Manual password validation (bypasses AuthenticationManager)
+    boolean passwordMatches = false;
 
-    public AuthResponse refreshToken(
+    // Check BCrypt hash
+    try {
+        passwordMatches = passwordEncoder.matches(request.getPassword(), user.getPassword());
+    } catch (Exception e) {
+        // ignore bcrypt error
+    }
 
-        String refreshToken
+    // Fallback: plain text comparison for old users
+    if (!passwordMatches) {
+        passwordMatches = request.getPassword().equals(user.getPassword());
+    }
 
-    ){
+    if (!passwordMatches) {
+        throw new BadCredentialsException("Invalid email or password");
+    }
 
-        String email =
+    // Step 4: Auto-upgrade plain text password to BCrypt
+    if (!user.getPassword().startsWith("$2a$") && !user.getPassword().startsWith("$2b$")) {
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        userRepository.save(user);
+    }
 
-            jwtService.extractUsername(
-                refreshToken
-            );
+    // Step 5: Generate JWT tokens
+    String accessToken  = jwtService.generateToken(user);
+    String refreshToken = jwtService.generateRefreshToken(user);
 
-        User user = userRepository
+    // Step 6: Get hospitalId if hospital role
+    Long hospitalId = null;
+    try {
+        if (user.getRole() == com.smartemergency.enums.Role.HOSPITAL) {
+            hospitalId = hospitalRepository.findByUser(user)
+                    .map(h -> h.getId()).orElse(null);
+        }
+    } catch (Exception e) {
+        // ignore
+    }
 
-                .findByEmail(email)
+    log.info("User logged in successfully: {}", user.getEmail());
 
-                .orElseThrow(() ->
+    return AuthResponse.builder()
+            .accessToken(accessToken)
+            .refreshToken(refreshToken)
+            .tokenType("Bearer")
+            .userId(user.getId())
+            .email(user.getEmail())
+            .fullName(user.getFullName())
+            .role(user.getRole())
+            .hospitalId(hospitalId)
+            .message("Login successful!")
+            .build();
+}
 
-                    new BusinessException(
+    // =====================================================
+    // REFRESH TOKEN
+    // =====================================================
 
-                        "Invalid refresh token"
+    public AuthResponse refreshToken(String refreshToken) {
 
-                    )
+        String email = jwtService.extractUsername(refreshToken);
 
-                );
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException("Invalid refresh token"));
 
-        if(!jwtService.isTokenValid(
-
-            refreshToken,
-
-            user
-
-        )){
-
-            throw new BusinessException(
-
-                "Refresh token expired"
-
-            );
-
+        if (!jwtService.isTokenValid(refreshToken, user)) {
+            throw new BusinessException("Refresh token is invalid or expired");
         }
 
-        String newAccessToken =
-
-            jwtService.generateToken(user);
+        String newAccessToken = jwtService.generateToken(user);
 
         return AuthResponse.builder()
-
                 .accessToken(newAccessToken)
-
                 .refreshToken(refreshToken)
-
                 .tokenType("Bearer")
-
                 .userId(user.getId())
-
                 .email(user.getEmail())
-
                 .fullName(user.getFullName())
-
                 .role(user.getRole())
-
                 .build();
-
     }
-
 }
